@@ -10,13 +10,15 @@ import ReactFlow, {
   NodeProps,
   Handle,
   Position,
+  useReactFlow,
+  Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 import { useConnection } from '@xyflow/react';
+import { toPng } from 'html-to-image';
 
-
-import { CirclePlus, Trash } from 'lucide-react'
+import { CirclePlus, Trash, Download } from 'lucide-react'
 
 // Constants for layout and dimensions
 const NODE_WIDTH = 120;
@@ -25,6 +27,127 @@ const HORIZONTAL_GAP = 30; // Increased horizontal gap for clarity
 
 // Color palette (assigned based on depth)
 const backgrounds = ['#172A2E', '#22383C', '#051114'];
+
+/**
+ * DownloadButton component that enables exporting the diagram as PNG
+ */
+const DownloadButton = () => {
+  const reactFlowInstance = useReactFlow();
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Export the entire diagram (fits all nodes)
+  const downloadFullDiagram = useCallback(() => {
+    // Make sure we have the latest node positions and fit all nodes
+    reactFlowInstance.fitView({ duration: 250 });
+    
+    setTimeout(() => {
+      // Use html-to-image to convert the viewport to PNG
+      toPng(document.querySelector('.react-flow') as HTMLElement, {
+        backgroundColor: '#010304',
+        quality: 1.0,
+        filter: (node) => {
+          // Exclude minimap and controls from the image
+          return !node.classList?.contains('react-flow__minimap') && 
+                !node.classList?.contains('react-flow__controls') &&
+                !node.classList?.contains('react-flow__panel');
+        },
+      })
+        .then((dataUrl) => {
+          // Create a download link and trigger the download
+          const link = document.createElement('a');
+          link.download = `penrove-full-diagram-${new Date().toISOString().slice(0, 10)}.png`;
+          link.href = dataUrl;
+          link.click();
+          setShowDropdown(false);
+        })
+        .catch((error) => {
+          console.error('Error exporting diagram:', error);
+        });
+    }, 300); // Delay to allow fitView animation to complete
+  }, [reactFlowInstance]);
+
+  // Export only the current view (what user is currently seeing)
+  const downloadCurrentView = useCallback(() => {
+    // Use html-to-image to convert the viewport to PNG without fitting
+    toPng(document.querySelector('.react-flow') as HTMLElement, {
+      backgroundColor: '#010304',
+      quality: 1.0,
+      filter: (node) => {
+        // Exclude minimap and controls from the image
+        return !node.classList?.contains('react-flow__minimap') && 
+              !node.classList?.contains('react-flow__controls') &&
+              !node.classList?.contains('react-flow__panel');
+      },
+    })
+      .then((dataUrl) => {
+        // Create a download link and trigger the download
+        const link = document.createElement('a');
+        link.download = `penrove-current-view-${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = dataUrl;
+        link.click();
+        setShowDropdown(false);
+      })
+      .catch((error) => {
+        console.error('Error exporting diagram:', error);
+      });
+  }, []);
+
+  // Common button style
+  const buttonStyle = {
+    background: '#172A2E',
+    border: '1px solid #686F71',
+    borderRadius: '5px',
+    color: '#D7D7D7',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    justifyContent: 'flex-start',
+    textAlign: 'left' as const,
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setShowDropdown(!showDropdown)}
+        style={buttonStyle}
+      >
+        <Download size={18} />
+        Export PNG
+      </button>
+      
+      {showDropdown && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          right: 0,
+          marginTop: '4px',
+          background: '#172A2E',
+          border: '1px solid #686F71',
+          borderRadius: '5px',
+          zIndex: 100,
+          width: '200px',
+          overflow: 'hidden',
+        }}>
+          <button 
+            onClick={downloadCurrentView}
+            style={buttonStyle}
+          >
+            Current View
+          </button>
+          <button 
+            onClick={downloadFullDiagram}
+            style={{...buttonStyle, borderTop: '1px solid #686F71'}}
+          >
+            Entire Diagram
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * NodeHeader component based on React Flow's node-header style.
@@ -320,6 +443,9 @@ const App = () => {
           <Background color="#616e70" gap={16} />
           <Controls style={{ position: 'fixed', right: 10, bottom: 10, zIndex: 10 }} />
           <MiniMap nodeColor={node => node.data.background || '#2F3F42'} />
+          <Panel position="top-right" style={{ margin: '10px' }}>
+            <DownloadButton />
+          </Panel>
         </ReactFlow>
       </ReactFlowProvider>
     </div>
