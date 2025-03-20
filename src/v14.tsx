@@ -18,12 +18,15 @@ import 'reactflow/dist/style.css';
 import { useConnection } from '@xyflow/react';
 import { toPng } from 'html-to-image';
 
-import { CirclePlus, Trash, Download, Link2, X } from 'lucide-react'
+import { CirclePlus, Trash, Download, Link2, X, Pencil } from 'lucide-react'
 
 // Constants for layout and dimensions
-const NODE_WIDTH = 120;
+const NODE_WIDTH = 180;
 const VERTICAL_GAP = 120;
 const HORIZONTAL_GAP = 30; // Increased horizontal gap for clarity
+
+// Node type options
+const NODE_TYPES = ['System', 'Subsystem', 'Component', 'Part'];
 
 // Color palette (assigned based on depth)
 const backgrounds = ['#172A2E', '#22383C', '#051114'];
@@ -348,6 +351,190 @@ const RelinkModeButton = ({ isRelinkMode, toggleRelinkMode, selectedNodeId, canc
 };
 
 /**
+ * Modal component for editing node properties
+ */
+const EditNodeModal = ({ 
+  open, 
+  onClose, 
+  node, 
+  onSave 
+}: { 
+  open: boolean; 
+  onClose: () => void; 
+  node: Node<any> | null;
+  onSave: (id: string, name: string, type: string) => void;
+}) => {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('');
+
+  useEffect(() => {
+    if (node) {
+      setName(node.data.label || '');
+      setType(node.data.type || '');
+    }
+  }, [node]);
+
+  if (!open || !node) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(node.id, name, type);
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: '#172A2E',
+          borderRadius: '16px',
+          padding: '20px',
+          width: '400px',
+          maxWidth: '90%',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: '18px', color: '#D7D7D7' }}>Edit Node</h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+            }}
+          >
+            <X size={20} color="#D7D7D7" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: 500,
+                color: '#D7D7D7',
+              }}
+            >
+              Name
+            </label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                border: '1px solid #2F3F42',
+                backgroundColor: '#0A1518',
+                color: '#D7D7D7',
+                fontSize: '14px',
+              }}
+              placeholder="Enter name"
+            />
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: 500,
+                color: '#D7D7D7',
+              }}
+            >
+              Type
+            </label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                border: '1px solid #2F3F42',
+                backgroundColor: '#0A1518',
+                color: '#D7D7D7',
+                fontSize: '14px',
+              }}
+            >
+              {NODE_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '8px',
+            }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: '1px solid #2F3F42',
+                backgroundColor: '#0A1518',
+                color: '#D7D7D7',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              style={{
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: '#CBEC80',
+                color: '#2F3F42',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/**
  * Main component.
  */
 const App = () => {
@@ -355,6 +542,8 @@ const App = () => {
   const [edges, setEdges] = useState<Edge<any>[]>([]);
   const [isRelinkMode, setIsRelinkMode] = useState(false);
   const [selectedNodeForRelink, setSelectedNodeForRelink] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedNodeForEdit, setSelectedNodeForEdit] = useState<Node<any> | null>(null);
   const nextId = useRef(2);
   
   // Use a ref for node parents to avoid dependency cycle
@@ -415,6 +604,39 @@ const App = () => {
     });
   }, []);
 
+  // Handle opening the edit modal
+  const handleOpenEditModal = useCallback((node: Node<any>) => {
+    setSelectedNodeForEdit(node);
+    setModalOpen(true);
+  }, []);
+
+  // Handle closing the edit modal
+  const handleCloseEditModal = useCallback(() => {
+    setModalOpen(false);
+    setSelectedNodeForEdit(null);
+  }, []);
+
+  // Handle saving node edits from the modal
+  const handleSaveNodeEdit = useCallback((id: string, name: string, type: string) => {
+    setNodes(nds =>
+      nds.map(node => {
+        if (node.id === id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              label: name,
+              type: type,
+            },
+          };
+        }
+        return node;
+      })
+    );
+    setModalOpen(false);
+    setSelectedNodeForEdit(null);
+  }, []);
+
   /**
    * Custom node component that now uses NodeHeader for its title.
    * Contains the header and two buttons: one for adding a child and one for deleting.
@@ -457,6 +679,11 @@ const App = () => {
       }
     };
 
+    const handleEditIconClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      data.onOpenEditModal({ id, data });
+    };
+
     return (
       <div
         style={{
@@ -464,9 +691,8 @@ const App = () => {
           border: isSelected ? '2px solid #CBEC80' : 
                  canBeRelinkTarget ? '2px solid #809CEC' : 
                  '1px solid #686F71',
-          borderRadius: 5,
-          background: data.background,
-          color: '#D7D7D7',
+          borderRadius: 15,
+          background: '#CBEC80',
           width: NODE_WIDTH,
           textAlign: 'center',
           cursor: data.isRelinkMode ? 'pointer' : 'default',
@@ -475,14 +701,65 @@ const App = () => {
         }}
         onClick={handleNodeClick}
       >
-        {/* Render the header with an input */}
-        <NodeHeader id={id} label={data.label} onLabelChange={data.onLabelChange} />
+        {/* Edit icon and content layout */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          marginBottom: 6,
+          textAlign: 'left'
+        }}>
+          {/* Edit icon on the left with round black background */}
+          <div 
+            style={{ 
+              marginRight: 10,
+              backgroundColor: 'black',
+              borderRadius: '50%',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            onClick={handleEditIconClick}
+          >
+            <Pencil
+              size={16}
+              style={{ 
+                color: 'white'
+              }}
+            />
+          </div>
+
+          {/* Name and Type vertically aligned on the right */}
+          <div>
+            {/* Name with specified color */}
+            <div style={{ color: '#7C7C7C', fontWeight: 500, marginBottom: 2 }}>
+              {data.label || 'Unnamed Node'}
+            </div>
+            {/* Type with specified color */}
+            <div style={{ color: '#2F3F42', fontSize: '0.85rem' }}>
+              {data.type || 'Component'}
+            </div>
+          </div>
+        </div>
+        
+        {/* Action buttons */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 5 }}>
-          <CirclePlus size={18} onClick={(e) => { e.stopPropagation(); data.onAddChild(id); }} style={{ cursor: 'pointer' }} />
+          <CirclePlus 
+            size={18} 
+            onClick={(e) => { e.stopPropagation(); data.onAddChild(id); }} 
+            style={{ cursor: 'pointer', color: '#2F3F42' }} 
+          />
           {data.parentId !== null && (
-            <Trash size={18} onClick={(e) => { e.stopPropagation(); data.onDelete(id); }} style={{ cursor: 'pointer' }} />
+            <Trash 
+              size={18} 
+              onClick={(e) => { e.stopPropagation(); data.onDelete(id); }} 
+              style={{ cursor: 'pointer', color: '#2F3F42' }} 
+            />
           )}
         </div>
+        
         {/* Fixed handles for top and bottom connection */}
         <Handle type="target" position={Position.Top} style={{ background: '#555' }} />
         <Handle type="source" position={Position.Bottom} style={{ background: '#555' }} />
@@ -501,6 +778,7 @@ const App = () => {
         position: { x: 0, y: 0 },
         data: {
           label: `Component #${nextId.current}`,
+          type: NODE_TYPES[2], // Default to 'Component'
           parentId,
           onAddChild: handleAddChild,
           onDelete: handleDelete,
@@ -509,6 +787,7 @@ const App = () => {
           selectedNodeForRelink,
           onSelectForRelink: handleSelectForRelink,
           onRelink: handleRelink,
+          onOpenEditModal: handleOpenEditModal,
         },
         style: {},
         draggable: false,
@@ -519,7 +798,7 @@ const App = () => {
       setEdges(computeEdges(laidOutNodes));
       return laidOutNodes;
     });
-  }, [isRelinkMode, selectedNodeForRelink, handleSelectForRelink, handleRelink]);
+  }, [isRelinkMode, selectedNodeForRelink, handleSelectForRelink, handleRelink, handleOpenEditModal]);
 
   // Callback to delete a node and its descendants.
   const handleDelete = useCallback((nodeId: string) => {
@@ -559,13 +838,14 @@ const App = () => {
               selectedNodeForRelink,
               onSelectForRelink: handleSelectForRelink,
               onRelink: handleRelink,
+              onOpenEditModal: handleOpenEditModal,
             },
           };
         }
         return node;
       })
     );
-  }, [handleAddChild, handleDelete, isRelinkMode, selectedNodeForRelink, handleSelectForRelink, handleRelink]);
+  }, [handleAddChild, handleDelete, isRelinkMode, selectedNodeForRelink, handleSelectForRelink, handleRelink, handleOpenEditModal]);
 
   // Update nodes when relink mode changes
   useEffect(() => {
@@ -579,11 +859,12 @@ const App = () => {
             selectedNodeForRelink,
             onSelectForRelink: handleSelectForRelink,
             onRelink: handleRelink,
+            onOpenEditModal: handleOpenEditModal,
           },
         }))
       );
     }
-  }, [isRelinkMode, selectedNodeForRelink, handleSelectForRelink, handleRelink]);
+  }, [isRelinkMode, selectedNodeForRelink, handleSelectForRelink, handleRelink, handleOpenEditModal]);
 
   // Initialize the root node on first render.
   useEffect(() => {
@@ -592,7 +873,8 @@ const App = () => {
       type: 'custom',
       position: { x: 300, y: 50 },
       data: {
-        label: 'Main Node',
+        label: 'Main System',
+        type: NODE_TYPES[0], // 'System' type
         parentId: null,
         onAddChild: handleAddChild,
         onDelete: handleDelete,
@@ -601,6 +883,7 @@ const App = () => {
         selectedNodeForRelink: null,
         onSelectForRelink: handleSelectForRelink,
         onRelink: handleRelink,
+        onOpenEditModal: handleOpenEditModal,
       },
       style: {},
       draggable: false,
@@ -628,6 +911,12 @@ const App = () => {
             />
           </Panel>
         </ReactFlow>
+        <EditNodeModal
+          open={modalOpen}
+          onClose={handleCloseEditModal}
+          node={selectedNodeForEdit}
+          onSave={handleSaveNodeEdit}
+        />
       </ReactFlowProvider>
     </div>
   );
